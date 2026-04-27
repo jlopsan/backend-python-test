@@ -1,0 +1,252 @@
+{
+  "info": {
+    "name": "Notification Service - Technical Test",
+    "description": "Colección para validar manualmente el servicio de notificaciones del reto.\n\nFlujo recomendado:\n1. `1. Crear solicitud` -> guarda automáticamente el `id` en la variable de colección.\n2. `2. Procesar solicitud` -> dispara el envío al provider.\n3. `3. Consultar estado` -> ejecutarlo varias veces hasta ver `sent` o `failed`.\n\nTambién hay casos de error (404 y validación 422) y un escenario `Flujo completo` que hace todo seguido.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "requestId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Crear solicitud",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "",
+              "const body = pm.response.json();",
+              "pm.test('body has id', () => pm.expect(body).to.have.property('id').that.is.a('string').and.not.empty);",
+              "",
+              "pm.collectionVariables.set('requestId', body.id);",
+              "console.log('Saved requestId =', body.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"user@example.com\",\n  \"message\": \"Your verification code is 1234\",\n  \"type\": \"email\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/requests",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "requests"]
+        }
+      }
+    },
+    {
+      "name": "2. Procesar solicitud",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200 or 202', () => pm.expect(pm.response.code).to.be.oneOf([200, 202]));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/requests/{{requestId}}/process",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "requests", "{{requestId}}", "process"]
+        }
+      }
+    },
+    {
+      "name": "3. Consultar estado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "",
+              "const body = pm.response.json();",
+              "const allowed = ['queued', 'processing', 'sent', 'failed'];",
+              "",
+              "pm.test('id matches', () => pm.expect(body.id).to.eql(pm.collectionVariables.get('requestId')));",
+              "pm.test('status is a valid literal', () => pm.expect(allowed).to.include(body.status));",
+              "",
+              "console.log('Current status =', body.status);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/requests/{{requestId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "requests", "{{requestId}}"]
+        }
+      }
+    },
+    {
+      "name": "Fallo - Consultar id inexistente (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/requests/does-not-exist",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "requests", "does-not-exist"]
+        }
+      }
+    },
+    {
+      "name": "Fallo - Procesar id inexistente (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/requests/does-not-exist/process",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "requests", "does-not-exist", "process"]
+        }
+      }
+    },
+    {
+      "name": "Fallo - Cuerpo inválido (422)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 422 (validation)', () => pm.response.to.have.status(422));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"to\": \"user@example.com\",\n  \"message\": \"\",\n  \"type\": \"telegram\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/requests",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "requests"]
+        }
+      }
+    },
+    {
+      "name": "Flujo completo (crear + procesar + consultar)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// 1) Crear",
+              "const baseUrl = pm.collectionVariables.get('baseUrl');",
+              "",
+              "const createReq = {",
+              "  url: baseUrl + '/v1/requests',",
+              "  method: 'POST',",
+              "  header: { 'Content-Type': 'application/json' },",
+              "  body: { mode: 'raw', raw: JSON.stringify({ to: 'user@example.com', message: 'hello', type: 'email' }) }",
+              "};",
+              "",
+              "pm.sendRequest(createReq, (err, res) => {",
+              "  if (err) { console.error('create failed', err); return; }",
+              "  const id = res.json().id;",
+              "  pm.collectionVariables.set('requestId', id);",
+              "  console.log('Created id =', id);",
+              "",
+              "  // 2) Procesar",
+              "  pm.sendRequest({ url: baseUrl + '/v1/requests/' + id + '/process', method: 'POST' }, (e2) => {",
+              "    if (e2) { console.error('process failed', e2); return; }",
+              "    console.log('Process accepted, polling status...');",
+              "  });",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// El request principal hace el GET final tras un pequeño delay implícito",
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "",
+              "const body = pm.response.json();",
+              "const terminal = ['sent', 'failed'];",
+              "",
+              "pm.test('eventually reaches terminal state', () => {",
+              "  pm.expect(['queued', 'processing', 'sent', 'failed']).to.include(body.status);",
+              "});",
+              "",
+              "if (!terminal.includes(body.status)) {",
+              "  console.log('Still', body.status, '- vuelve a ejecutar el request o usa el Runner.');",
+              "} else {",
+              "  console.log('Final status =', body.status);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/requests/{{requestId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "requests", "{{requestId}}"]
+        }
+      }
+    }
+  ]
+}
